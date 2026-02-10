@@ -188,6 +188,11 @@ class OpenEvolve:
         # Initialize improved parallel processing components
         self.parallel_controller = None
 
+        # Initialize GCA (Global Collective Archive) — opt-in observer
+        self.gca_stack = None
+        self._gca_run_id = None
+        self._init_gca()
+
     def _setup_logging(self) -> None:
         """Set up logging"""
         log_dir = self.config.log_dir or os.path.join(self.output_dir, "logs")
@@ -240,6 +245,36 @@ class OpenEvolve:
             model_cfg._manual_queue_dir = str(qdir)
 
         logger.info(f"Manual mode enabled. Queue dir: {qdir}")
+
+    def _init_gca(self) -> None:
+        """Initialize the GCA (Global Collective Archive) if configured.
+
+        GCA is opt-in: if the ``gca`` section is absent from the config
+        or ``gca.enabled`` is False, this is a no-op.
+        """
+        try:
+            gca_dict = self.config.gca
+            if gca_dict is None:
+                return
+
+            from gca.openevolve_integration import build_gca_stack_for_oe
+
+            result = build_gca_stack_for_oe(
+                gca_dict,
+                llm_ensemble=self.llm_ensemble,
+                output_dir=self.output_dir,
+            )
+            if result is not None:
+                self.gca_stack, self._gca_run_id = result
+                logger.info(
+                    "GCA enabled (run_id=%s, store=%s)",
+                    self._gca_run_id,
+                    self.gca_stack.config.store_path,
+                )
+        except ImportError:
+            logger.debug("GCA package not available — skipping")
+        except Exception:
+            logger.warning("GCA initialization failed — continuing without GCA", exc_info=True)
 
     def _load_initial_program(self) -> str:
         """Load the initial program from file"""
@@ -333,6 +368,10 @@ class OpenEvolve:
                 self.database,
                 self.evolution_tracer,
                 file_suffix=self.config.file_suffix,
+                gca_observer=(
+                    self.gca_stack.observer if self.gca_stack else None
+                ),
+                gca_run_id=self._gca_run_id,
             )
 
             # Set up signal handlers for graceful shutdown
@@ -354,6 +393,10 @@ class OpenEvolve:
 
             self.parallel_controller.start()
 
+            # Start GCA background worker if enabled
+            if self.gca_stack:
+                await self.gca_stack.start()
+
             # When starting from iteration 0, we've already done the initial program evaluation
             # So we need to adjust the start_iteration for the actual evolution
             evolution_start = start_iteration
@@ -371,6 +414,13 @@ class OpenEvolve:
             )
 
         finally:
+            # Stop GCA background worker
+            if self.gca_stack:
+                try:
+                    await self.gca_stack.stop()
+                except Exception:
+                    logger.warning("GCA shutdown error", exc_info=True)
+
             # Clean up parallel processing resources
             if self.parallel_controller:
                 self.parallel_controller.stop()

@@ -5,7 +5,7 @@ log_level: "INFO"
 
 # LLM configuration
 llm:
-  primary_model: "google/gemini-2.5-flash-lite"
+  primary_model: "google/gemini-2.0-flash-001"
   # primary_model: "llama3.1-8b"
   primary_model_weight: 1.0
   secondary_model: "anthropic/claude-3.7-sonnet"
@@ -56,11 +56,11 @@ evaluator:
 diff_based_evolution: false  # Use full rewrites instead of diffs
 allow_full_rewrites: true    # Allow full rewrites for constructor functions
 
-#GCA configuration
+# GCA configuration
 gca:
   enabled: true
-  store_path: "gca/gca_store"
+  store_path: "examples/circle_packing/gca-specific-results/with_gca_phase1/gca_store"
   extractor:
-    type: "llm_solution_analysis"
+    type: "heuristic"
   policy:
-    type: "mvp"         # or "always"/"never"
+    type: "mvp"
