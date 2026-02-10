@@ -58,11 +58,11 @@ diff_based_evolution: false
 allow_full_rewrites: true  # Definitely allow full rewrites
 max_code_length: 100000
 
-#GCA configuration
+# GCA configuration
 gca:
-  enabled: false
-  store_path: "gca/gca_store"
+  enabled: true
+  store_path: "examples/circle_packing/gca-specific-results/with_gca_phase2/gca_store"
   extractor:
-    type: "llm_solution_analysis"
+    type: "heuristic"
   policy:
-    type: "mvp"         # or "always"/"never"
+    type: "mvp"

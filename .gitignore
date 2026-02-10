@@ -56,3 +56,8 @@ htmlcov/
 # For SR
 secrets.yaml
 problems
+
+# For GCA
+gca/gca_store
+
+examples/circle_packing/gca-specific-results

@@ -342,12 +342,18 @@ class ProcessParallelController:
         database: ProgramDatabase,
         evolution_tracer=None,
         file_suffix: str = ".py",
+        gca_observer=None,
+        gca_run_id: Optional[str] = None,
     ):
         self.config = config
         self.evaluation_file = evaluation_file
         self.database = database
         self.evolution_tracer = evolution_tracer
         self.file_suffix = file_suffix
+
+        # GCA observer (opt-in, may be None)
+        self.gca_observer = gca_observer
+        self._gca_run_id = gca_run_id or ""
 
         self.executor: Optional[ProcessPoolExecutor] = None
         self.shutdown_event = mp.Event()
@@ -571,6 +577,22 @@ class ProcessParallelController:
                     # Store artifacts
                     if result.artifacts:
                         self.database.store_artifacts(child_program.id, result.artifacts)
+
+                    # Notify GCA observer (non-blocking, fire-and-forget)
+                    if self.gca_observer is not None:
+                        try:
+                            from gca.openevolve_integration import notify_gca
+
+                            await notify_gca(
+                                self.gca_observer,
+                                child_program,
+                                result,
+                                self.database,
+                                run_id=self._gca_run_id,
+                                iteration=completed_iteration,
+                            )
+                        except Exception as _gca_err:
+                            logger.debug("GCA notification failed: %s", _gca_err)
 
                     # Log evolution trace
                     if self.evolution_tracer:

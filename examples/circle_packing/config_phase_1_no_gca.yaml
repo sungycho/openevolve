@@ -56,11 +56,6 @@ evaluator:
 diff_based_evolution: false  # Use full rewrites instead of diffs
 allow_full_rewrites: true    # Allow full rewrites for constructor functions
 
-#GCA configuration
+# GCA configuration
 gca:
-  enabled: true
-  store_path: "gca/gca_store"
-  extractor:
-    type: "llm_solution_analysis"
-  policy:
-    type: "mvp"         # or "always"/"never"
+  enabled: false

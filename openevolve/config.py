@@ -430,6 +430,11 @@ class Config:
     # Parallel controller settings
     max_tasks_per_child: Optional[int] = None
 
+    # GCA (Global Collective Archive) — opt-in observer.
+    # Stored as a raw dict so the gca package can parse it independently
+    # via GCAConfig.from_dict().  When absent or None, GCA is disabled.
+    gca: Optional[Dict[str, Any]] = None
+
     @classmethod
     def from_yaml(cls, path: Union[str, Path]) -> "Config":
         """Load configuration from a YAML file"""
