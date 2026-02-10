@@ -17,6 +17,9 @@ dependencies = [
     "tqdm>=4.64.0",
     "flask",
     "dacite>=1.9.2",
+    "matplotlib>=3.10.8",
+    "scipy>=1.15.3",
+    "pathlib>=1.0.1",
 ]
 
 [project.optional-dependencies]
