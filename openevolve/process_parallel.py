@@ -178,6 +178,9 @@ def _run_iteration_worker(
             parent_changes_desc = None
             child_changes_desc = None
 
+        # Extract GCA strategies from snapshot (if present)
+        gca_strategies = db_snapshot.get("gca_strategies")
+
         prompt = _worker_prompt_sampler.build_prompt(
             current_program=parent.code,
             parent_program=parent.code,
@@ -191,6 +194,7 @@ def _run_iteration_worker(
             program_artifacts=parent_artifacts,
             feature_dimensions=db_snapshot.get("feature_dimensions", []),
             current_changes_description=parent_changes_desc,
+            gca_strategies=gca_strategies,
         )
 
         iteration_start = time.time()
@@ -344,6 +348,7 @@ class ProcessParallelController:
         file_suffix: str = ".py",
         gca_observer=None,
         gca_run_id: Optional[str] = None,
+        gca_stack=None,
     ):
         self.config = config
         self.evaluation_file = evaluation_file
@@ -354,6 +359,9 @@ class ProcessParallelController:
         # GCA observer (opt-in, may be None)
         self.gca_observer = gca_observer
         self._gca_run_id = gca_run_id or ""
+
+        # GCA stack for strategy feedback (opt-in, may be None)
+        self.gca_stack = gca_stack
 
         self.executor: Optional[ProcessPoolExecutor] = None
         self.shutdown_event = mp.Event()
@@ -472,6 +480,25 @@ class ProcessParallelController:
             artifacts = self.database.get_artifacts(pid)
             if artifacts:
                 snapshot["artifacts"][pid] = artifacts
+
+        # GCA strategy feedback: inject top strategies into snapshot
+        if self.gca_stack is not None:
+            try:
+                feedback_cfg = getattr(self.gca_stack.config, "feedback", None)
+                if feedback_cfg and feedback_cfg.enabled:
+                    top_k = feedback_cfg.top_k
+                    strategies = self.gca_stack.archive.query.top_strategies_by_fitness(top_k)
+                    if strategies:
+                        snapshot["gca_strategies"] = [
+                            {
+                                "description": strat.description,
+                                "best_fitness": best_fitness,
+                                "count": count,
+                            }
+                            for strat, best_fitness, count in strategies
+                        ]
+            except Exception as e:
+                logger.debug("GCA strategy feedback failed: %s", e)
 
         return snapshot
 

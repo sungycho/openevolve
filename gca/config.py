@@ -71,6 +71,14 @@ class GCAAutosaveConfig:
 
 
 @dataclass
+class GCAFeedbackConfig:
+    """Configuration for strategy feedback into the LLM prompt."""
+
+    enabled: bool = False
+    top_k: int = 3
+
+
+@dataclass
 class GCAConfig:
     """Top-level GCA configuration.
 
@@ -85,6 +93,7 @@ class GCAConfig:
     policy: GCAPolicyConfig = field(default_factory=GCAPolicyConfig)
     async_config: GCAAsyncConfig = field(default_factory=GCAAsyncConfig)
     autosave: GCAAutosaveConfig = field(default_factory=GCAAutosaveConfig)
+    feedback: GCAFeedbackConfig = field(default_factory=GCAFeedbackConfig)
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> GCAConfig:
@@ -96,6 +105,7 @@ class GCAConfig:
         policy_data = data.get("policy", {})
         async_data = data.get("async", data.get("async_config", {}))
         autosave_data = data.get("autosave", {})
+        feedback_data = data.get("feedback", {})
 
         return cls(
             enabled=data.get("enabled", False),
@@ -116,6 +126,10 @@ class GCAConfig:
             autosave=GCAAutosaveConfig(**{
                 k: v for k, v in autosave_data.items()
                 if k in GCAAutosaveConfig.__dataclass_fields__
+            }),
+            feedback=GCAFeedbackConfig(**{
+                k: v for k, v in feedback_data.items()
+                if k in GCAFeedbackConfig.__dataclass_fields__
             }),
         )
 

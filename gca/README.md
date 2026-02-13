@@ -1,6 +1,6 @@
 # Global Collective Archive (GCA)
 
-**GCA converts implicit, ephemeral collective knowledge in evolutionary LLM systems into explicit, persistent, strategy-level memory—without changing the evolution process itself.**
+**GCA converts implicit, ephemeral collective knowledge in evolutionary LLM systems into explicit, persistent, strategy-level memory.** In v0, GCA is a pure observer. In v1, GCA completes the feedback loop by injecting top strategies back into the LLM prompt every iteration.
 
 ---
 
@@ -61,29 +61,30 @@ These principles avoid the brittleness and opacity of summary-only approaches wh
 
 ```
 ┌─────────────────────────────────────────────────────┐
-│          OpenEvolve (Unchanged)                     │
+│          OpenEvolve                                  │
 │  ┌──────────┐  ┌──────────┐  ┌──────────┐           │
 │  │ Database │  │ Iterator │  │Evaluator │           │
 │  └──────────┘  └──────────┘  └──────────┘           │
-└────────────────┬────────────────────────────────────┘
-                 │ evaluation events
-                 ▼
-         ┌───────────────────┐
-         │ Strategy Extractor│  (LLM-based semantic analysis)
-         └────────┬──────────┘
-                  │ strategies
-                  ▼
-         ┌───────────────────┐
-         │ Global Collective │  (persistent, queryable archive)
-         │     Archive       │
-         └───────────────────┘
+└───────┬────────────────────────────┬───────────────-┘
+        │ evaluation events          ▲ top strategies
+        ▼                            │ (v1 feedback)
+ ┌───────────────────┐               │
+ │ Strategy Extractor│               │
+ └────────┬──────────┘               │
+          │ strategies               │
+          ▼                          │
+ ┌───────────────────┐    ┌─────────┴─────────┐
+ │ Global Collective │───▶│ Strategy Feedback │
+ │     Archive       │    │  (prompt injection)│
+ └───────────────────┘    └───────────────────┘
 ```
 
 **Key architectural properties**:
 
 * GCA sits **outside the evolution loop**
-* It observes evaluation events, extracts strategies, and records them
-* Evolution proceeds unchanged; GCA adds a parallel understanding layer
+* **v0 (observer path)**: Observes evaluation events, extracts strategies, and records them
+* **v1 (feedback path)**: Before each iteration, queries top strategies by fitness and injects them into the LLM prompt as a "Collective Strategy Insights" section
+* Evolution logic is unchanged; GCA adds a parallel understanding layer and optional strategy guidance
 
 ---
 
@@ -146,13 +147,93 @@ Strategies represent:
 * Not mutation operators or prompt fragments
 * Not control signals for the evolution process (in v0)
 
-**Key principle**: In GCA v0, strategies are *observations*, not *instructions*.
+**Key principle**: In GCA v0, strategies are *observations*, not *instructions*. GCA v1 crosses this boundary — strategies become *guidance* fed back to the LLM (see Section 7).
 
 ---
 
-## 7. What GCA Enables Today
+## 7. GCA v1 — Strategy Feedback Loop
 
-With GCA v0, you can:
+GCA v0 is observer-only: it extracts strategies and stores them, but never feeds them back to the LLM. **GCA v1 completes the feedback loop** by injecting top-performing strategies into every LLM prompt as meta-reasoning guidance.
+
+### How It Works
+
+Before each iteration, the main process:
+
+1. Queries `ArchiveQuery.top_strategies_by_fitness(top_k)` — strategies ranked by best associated program fitness
+2. Serializes them into the database snapshot as `snapshot["gca_strategies"]`
+3. The worker process picks up the snapshot, renders the strategies into a **"Collective Strategy Insights"** section in the prompt
+
+### Data Flow
+
+```
+Main Process                          Worker Process
+─────────────                         ──────────────
+gca_stack.archive.query
+  .top_strategies_by_fitness(3)
+         │
+         ▼
+snapshot["gca_strategies"] = [
+  {"description": "...",
+   "best_fitness": 0.85,
+   "count": 5}, ...
+]
+         │
+         ▼ (pickle via ProcessPool)
+                                      db_snapshot["gca_strategies"]
+                                               │
+                                               ▼
+                                      build_prompt(gca_strategies=...)
+                                               │
+                                               ▼
+                                      "## Collective Strategy Insights
+                                       Here are strategies that previously
+                                       improved fitness..."
+```
+
+### Prompt Injection Format
+
+Each strategy is rendered as a bullet point within the prompt's evolution history section:
+
+```
+## Collective Strategy Insights
+
+Here are strategies that previously improved fitness. Reflect on whether
+adapting or combining them could improve the current program.
+
+- **uses scipy.optimize SLSQP for constrained optimization** (best fitness: 2.6343, seen in 12 programs)
+- **hexagonal close-packing as initial seed layout** (best fitness: 2.4210, seen in 8 programs)
+- **iterative greedy radius expansion with overlap correction** (best fitness: 2.3770, seen in 5 programs)
+```
+
+This section appears at the top of the evolution history template (`evolution_history.txt`), before "Previous Attempts" and "Top Performing Programs". When feedback is disabled or no strategies exist yet, the section is omitted entirely.
+
+### Configuration
+
+```yaml
+gca:
+  enabled: true
+  store_path: "./gca_store"
+  feedback:
+    enabled: true   # false = v0 observer-only behavior
+    top_k: 3
+  extractor:
+    type: "llm_solution_analysis"
+    max_strategies: 3
+  policy:
+    type: "mvp"
+```
+
+### Backward Compatibility
+
+* `feedback` defaults to `enabled: false` — runs without a `feedback:` section work identically to v0
+* All v0 design choices (extraction, storage, observer pipeline) are preserved unchanged
+* GCA v1 only adds a **read-only feedback path** from the archive back to the prompt
+
+---
+
+## 8. What GCA Enables Today
+
+With GCA v0 (observer), you can:
 
 1. **Enumerate recurring strategies across runs**
    * Query: "Which strategies appear most frequently?"
@@ -171,52 +252,66 @@ With GCA v0, you can:
    * Raw data stored for post-hoc analysis
    * No premature aggregation or scoring
 
-These capabilities provide a foundation for systematic study of collective memory in evolutionary LLM systems.
+With GCA v1 (feedback), you additionally get:
+
+5. **Strategy-guided evolution**
+   * Top strategies (ranked by best associated program fitness) are injected into every LLM prompt
+   * The LLM receives explicit meta-reasoning guidance about what has worked well so far
+   * Strategies accumulate over iterations, providing increasingly informed guidance
+
+These capabilities provide a foundation for systematic study — and active use — of collective memory in evolutionary LLM systems.
 
 ---
 
-## 8. What GCA Unlocks Next (Forward-Looking)
+## 9. What GCA Unlocks Next (Forward-Looking)
 
-GCA's explicit memory enables natural extensions, intentionally deferred in v0:
+GCA's explicit memory enables natural extensions. GCA v1 realized one of these (marked below); the rest remain future directions:
 
 * **Strategy effectiveness estimation**: Statistical models of strategy-outcome associations
 * **Strategy decay and forgetting**: Time-based or relevance-based pruning
 * **Feature-conditioned statistics**: "Which strategies work in specific regimes?"
 * **Parent-delta triggers**: Extract strategies from programs that significantly outperform parents
-* **Strategy selection or weighting**: Inform mutation or sampling based on GCA insights
+* ~~**Closed-loop integration**: Let GCA insights influence evolution policy in real time~~ — **Partially realized in v1** via fitness-ranked prompt injection
+* **Strategy selection or weighting**: More sophisticated selection beyond top-k by fitness
 * **Novelty-based extraction**: Focus on programs that diverge from known strategies
 * **Cross-task transfer**: Reuse strategies from prior problem domains
-* **Closed-loop integration**: Let GCA insights influence evolution policy in real time
 * **Strategy composition**: Combine or synthesize strategies for new contexts
 * **Meta-learning**: Optimize strategy extraction and application policies
 
-**Key framing**: v0 is observer-first; these extensions are future directions built on top of persistent strategy memory.
+**Key framing**: v0 is observer-first; v1 adds a minimal feedback path; the remaining extensions are future directions built on top of persistent strategy memory.
 
 ---
 
-## 9. Experimental Setup
+## 10. Experimental Setup
 
-To evaluate GCA's impact and overhead, we compare:
+### GCA v1 Four-Mix Ablation
 
-* **OpenEvolve baseline**: Standard evolution without GCA
-* **OpenEvolve + GCA**: Evolution with strategy extraction and archival enabled
+To evaluate GCA v1's strategy feedback, we run a full 2×2 ablation across phases:
+
+| Run | Phase 1 | Phase 2 |
+|-----|---------|---------|
+| `mix_no_p1_to_no_p2` | No GCA | No GCA |
+| `mix_no_p1_to_with_p2` | No GCA | GCA v1 feedback |
+| `mix_with_p1_to_no_p2` | GCA v1 feedback | No GCA |
+| `mix_with_p1_to_with_p2` | GCA v1 feedback | GCA v1 feedback |
 
 ### Experimental Controls
-* Same task and evaluation function
+* Same task and evaluation function (circle packing, n=26)
 * Identical evolution configuration (population size, mutation rates, etc.)
-* Same model family across compared runs: Gemini 2.0 Flash
-* Same two-phase schedule as the standard OpenEvolve setup used in this study: Phase 1 (exploration-oriented settings) followed by Phase 2 (post-plateau settings), each run for 100 iterations
-* GCA operates asynchronously; no change to evolutionary logic
-* Metrics: solution quality over time, strategy diversity, extraction overhead
-* Full per-phase configuration details are documented in the YAML files under `examples/circle_packing/` (e.g., `config_phase_1_*` and `config_phase_2_*`)
- 
+* Same model family across compared runs: Gemini 2.5 Flash Lite
+* Same two-phase schedule: Phase 1 (exploration-oriented) followed by Phase 2 (post-plateau), each run for 100 iterations
+* Phase 2 runs resume from the corresponding Phase 1 checkpoint
+* GCA extraction operates asynchronously; feedback is injected synchronously before each iteration
+* Metrics: solution quality over time (`sum_radii`), strategy diversity
+* Full per-phase configuration details are documented in the YAML files under `examples/circle_packing/` (e.g., `config_phase_1_gca_v1.yaml`, `config_phase_2_no_gca_v1.yaml`, etc.)
+
 ---
 
-## 10. Experimental Results
+## 11. Experimental Results
 
-### Comparison Plot (GCA vs No GCA | Phase 1 vs Phase 2)
+### GCA v1 Four-Mix Comparison Plot
 
-![GCA Comparison (sum of radii)](../examples/circle_packing/gca-comparison.png)
+![GCA v1 Four-Mix Comparison (sum of radii)](../examples/circle_packing/gca-v1-result.png)
 
 ### ShinkaEvolve Reference Plot
 
@@ -224,58 +319,35 @@ To evaluate GCA's impact and overhead, we compare:
 
 ### Observations and Interpretation
 
-The current ablation produced an interesting pattern across phase schedules:
+The v1 four-mix ablation produced a clear pattern across phase schedules:
 
-*  Enabling GCA in both Phase 1 and Phase 2 yielded the lowest final score among tested settings.
-* The strongest final result was obtained when GCA was enabled in Phase 1 and disabled in Phase 2.
+* **GCA feedback in both phases** (`with_p1_to_with_p2`) yielded the strongest final score among tested settings.
+* **No GCA in either phase** (`no_p1_to_no_p2`) yielded the lowest final score.
+* The two mixed conditions (`no_p1_to_with_p2` and `with_p1_to_no_p2`) fell between the two extremes.
 
-One conservative interpretation is variance: this behavior may partially reflect run-to-run stochasticity in vanilla OpenEvolve. A more constructive hypothesis is that GCA altered the early search trajectory in Phase 1, after which a non-GCA Phase 2 exploited that trajectory more effectively and produced a delayed score jump.
-
-Model choice is also a plausible confounder. These runs used Gemini 2.0 Flash, a lightweight and low-cost model; this may not be the most suitable regime for strategy extraction quality in GCA-enabled settings, particularly if extraction fidelity is sensitive to model reasoning depth.
-
-Relative to the ShinkaEvolve reference, both trajectories approach a similar high-end `sum_radii` regime near the best-known level, but the dynamics differ. In our runs, the major gain appears around iteration ~120. In the ShinkaEvolve curve, there is an early jump (<20 iterations) followed by a more gradual improvement up to roughly iteration ~140. A plausible explanation is systems-level: ShinkaEvolve adds additional mechanisms beyond vanilla OpenEvolve (e.g., periodic meta-analysis, explicit lineage interactions, population-level competition, novelty-based rejection/sampling), whereas our setup isolates the effect of adding GCA to a largely vanilla OpenEvolve loop.
-
-Overall, these results are promising but not yet definitive. The next step is controlled replication across multiple seeds, model families/capacities, and longer iteration budgets to separate genuine GCA effects from variance and interaction effects.
-
- 
-#### Main Empirical Pattern
- 
-* Enabling GCA in both Phase 1 and Phase 2 yielded the lowest final score among tested settings.
-* The strongest final result was obtained when GCA was enabled in Phase 1 and disabled in Phase 2.
- 
-#### Working Interpretations
-
-**Variance-first interpretation**: The pattern may partly reflect run-to-run stochasticity in vanilla OpenEvolve.
-**Trajectory-shaping interpretation**: GCA may have shifted the search trajectory during Phase 1; a non-GCA Phase 2 may then have exploited that trajectory more effectively, producing a delayed score increase.
+This pattern is consistent with the hypothesis that strategy feedback provides cumulative benefit: the longer strategies are fed back into the LLM prompt, the more the evolution benefits from collective memory.
 
 #### Model-Capacity Caveat
 
-These runs used Gemini 2.0 Flash. As a lightweight model, it may not be ideal for high-fidelity strategy extraction in GCA-enabled settings, especially if extraction quality depends on deeper reasoning capacity.
+These runs used Gemini 2.5 Flash Lite. As a lightweight model, it may not be ideal for high-fidelity strategy extraction in GCA-enabled settings, especially if extraction quality depends on deeper reasoning capacity.
 
 #### Comparison to ShinkaEvolve Dynamics
 
-Both our setup and the ShinkaEvolve reference approach a similar high-end `sum_radii` regime near the best-known level, but with different temporal dynamics:
-
-* **Our curve**: major gain around iteration ~120.
-* **ShinkaEvolve curve**: early jump (<20 iterations), followed by gradual improvement to roughly iteration ~140.
-
-A plausible explanation is systems-level difference. ShinkaEvolve includes additional mechanisms beyond vanilla OpenEvolve (e.g., periodic meta-analysis, explicit lineage interactions, population-level competition, novelty-based rejection/sampling), whereas our setup isolates the effect of adding GCA to a largely vanilla OpenEvolve loop.
+Both our setup and the ShinkaEvolve reference approach a similar high-end `sum_radii` regime near the best-known level, but with different temporal dynamics. A plausible explanation is systems-level difference: ShinkaEvolve includes additional mechanisms beyond vanilla OpenEvolve (e.g., periodic meta-analysis, explicit lineage interactions, population-level competition, novelty-based rejection/sampling), whereas our setup isolates the effect of adding GCA feedback to a largely vanilla OpenEvolve loop.
 
 #### Next Validation Steps
- 
+
 These findings are promising but not definitive. The next step is controlled replication across:
- 
+
 * multiple random seeds
 * different model families and capacities
 * longer iteration budgets
- 
-This is necessary to separate genuine GCA effects from variance and interaction effects.
- 
 
+This is necessary to separate genuine GCA v1 feedback effects from variance and interaction effects.
 
 ---
 
-## 11. Appendix: File Guide
+## 12. Appendix: File Guide
 
 This repository's `gca/` package is intentionally modular. Each file has a focused role:
 
@@ -293,6 +365,7 @@ This repository's `gca/` package is intentionally modular. Each file has a focus
 * `gca/openevolve_integration.py`: Adapter layer between OpenEvolve runtime objects and GCA events.
 * `gca/cli.py`: Human-facing inspection CLI for archive contents.
 
-Design reference:
+Design references:
 
-* `gca/gca_v0_design.md` captures the original implementation plan, invariants, and layering decisions that guided this package.
+* `gca/gca-v0-design.md` captures the original implementation plan, invariants, and layering decisions that guided this package.
+* `gca/gca-v1-design.md` captures the strategy feedback loop design added in v1.

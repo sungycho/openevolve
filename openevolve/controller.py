@@ -372,6 +372,7 @@ class OpenEvolve:
                     self.gca_stack.observer if self.gca_stack else None
                 ),
                 gca_run_id=self._gca_run_id,
+                gca_stack=self.gca_stack,
             )
 
             # Set up signal handlers for graceful shutdown

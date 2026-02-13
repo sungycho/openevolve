@@ -4,20 +4,15 @@ import pathlib
 import matplotlib.pyplot as plt
 
 # --- Configure paths here ---------------------------------------------------
-NO_GCA_PHASE1_DIR = pathlib.Path("examples/circle_packing/gca-specific-results/no_gca_phase1")
-NO_GCA_PHASE2_DIR = pathlib.Path("examples/circle_packing/gca-specific-results/no_gca_phase2")
-WITH_GCA_PHASE1_DIR = pathlib.Path("examples/circle_packing/gca-specific-results/with_gca_phase1")
-WITH_GCA_PHASE2_DIR = pathlib.Path("examples/circle_packing/gca-specific-results/with_gca_phase2")
-WITH_GCA_PHASE2_FROM_NO_GCA_PHASE1_DIR = pathlib.Path(
-    "examples/circle_packing/gca-specific-results/with_gca_phase2_from_no_gca_phase1"
-)
-NO_GCA_PHASE2_FROM_WITH_GCA_PHASE1_DIR = pathlib.Path(
-    "examples/circle_packing/gca-specific-results/no_gca_phase2_from_with_gca_phase1"
-)
+RESULT_ROOT = pathlib.Path("examples/circle_packing/gca-v1-feedback-four-mix-results")
+NO_GCA_PHASE1_DIR = RESULT_ROOT / "phase1_no_gca"
+WITH_GCA_PHASE1_DIR = RESULT_ROOT / "phase1_with_gca"
+MIX_NO_P1_TO_NO_P2_DIR = RESULT_ROOT / "mix_no_p1_to_no_p2"
+MIX_NO_P1_TO_WITH_P2_DIR = RESULT_ROOT / "mix_no_p1_to_with_p2"
+MIX_WITH_P1_TO_NO_P2_DIR = RESULT_ROOT / "mix_with_p1_to_no_p2"
+MIX_WITH_P1_TO_WITH_P2_DIR = RESULT_ROOT / "mix_with_p1_to_with_p2"
 
 METRIC = "sum_radii"
-PHASE1_END = 100
-PHASE2_START = 101
 # -----------------------------------------------------------------------------
 
 
@@ -70,39 +65,82 @@ def build_running_best(
     return xs, ys
 
 
-def build_condition_curve(phase1_dir: pathlib.Path, phase2_dir: pathlib.Path) -> tuple[list[int], list[float]]:
+def shift_phase2_iterations(
+    phase2_by_iter: dict[int, float],
+    phase1_end: int,
+) -> dict[int, float]:
+    if not phase2_by_iter:
+        return {}
+
+    p2_min = min(phase2_by_iter)
+    p2_max = max(phase2_by_iter)
+
+    # If phase2 run restarted at 0/1 (common when starting from best_program.py),
+    # shift its x-axis to continue after phase1.
+    if p2_max <= phase1_end or p2_min <= phase1_end:
+        return {i + phase1_end: v for i, v in phase2_by_iter.items()}
+    return phase2_by_iter
+
+
+def build_condition_curve(
+    phase1_dir: pathlib.Path,
+    phase2_dir: pathlib.Path,
+) -> tuple[list[int], list[float], int]:
     p1_ckpt = latest_checkpoint_dir(phase1_dir)
     p2_ckpt = latest_checkpoint_dir(phase2_dir)
 
     p1_by_iter = load_best_per_iteration(p1_ckpt, METRIC)
     p2_by_iter = load_best_per_iteration(p2_ckpt, METRIC)
 
-    x1, y1 = build_running_best(p1_by_iter, 1, PHASE1_END)
+    if not p1_by_iter:
+        return [], [], 0
+
+    phase1_start = min(p1_by_iter)
+    phase1_end = max(p1_by_iter)
+    x1, y1 = build_running_best(p1_by_iter, phase1_start, phase1_end)
     initial_best = y1[-1] if y1 else None
 
-    phase2_end = max([i for i in p2_by_iter.keys() if i >= PHASE2_START], default=PHASE1_END)
-    x2, y2 = build_running_best(p2_by_iter, PHASE2_START, phase2_end, initial_best=initial_best)
+    p2_display = shift_phase2_iterations(p2_by_iter, phase1_end)
+    if p2_display:
+        phase2_start = min(p2_display)
+        phase2_end = max(p2_display)
+        x2, y2 = build_running_best(p2_display, phase2_start, phase2_end, initial_best=initial_best)
+    else:
+        x2, y2 = [], []
 
-    return x1 + x2, y1 + y2
+    return x1 + x2, y1 + y2, phase1_end
 
 
 def main() -> None:
-    x_no, y_no = build_condition_curve(NO_GCA_PHASE1_DIR, NO_GCA_PHASE2_DIR)
-    x_yes, y_yes = build_condition_curve(WITH_GCA_PHASE1_DIR, WITH_GCA_PHASE2_DIR)
-    x_no_to_yes, y_no_to_yes = build_condition_curve(
+    x_no, y_no, p1_end_no = build_condition_curve(
         NO_GCA_PHASE1_DIR,
-        WITH_GCA_PHASE2_FROM_NO_GCA_PHASE1_DIR,
+        MIX_NO_P1_TO_NO_P2_DIR,
     )
-    x_yes_to_no, y_yes_to_no = build_condition_curve(
+    x_no_to_yes, y_no_to_yes, _ = build_condition_curve(
+        NO_GCA_PHASE1_DIR,
+        MIX_NO_P1_TO_WITH_P2_DIR,
+    )
+    x_yes_to_no, y_yes_to_no, p1_end_yes = build_condition_curve(
         WITH_GCA_PHASE1_DIR,
-        NO_GCA_PHASE2_FROM_WITH_GCA_PHASE1_DIR,
+        MIX_WITH_P1_TO_NO_P2_DIR,
+    )
+    x_yes, y_yes, _ = build_condition_curve(
+        WITH_GCA_PHASE1_DIR,
+        MIX_WITH_P1_TO_WITH_P2_DIR,
     )
 
     plt.figure(figsize=(11, 5.5))
 
     # Four red-family lines: two baseline runs + two crossover runs.
     plt.plot(x_no, y_no, color="darkred", linewidth=2.2, label="No GCA (P1) -> No GCA (P2)")
-    plt.plot(x_yes, y_yes, color="red", linewidth=2.2, linestyle="--", label="With GCA (P1) -> With GCA (P2)")
+    plt.plot(
+        x_yes,
+        y_yes,
+        color="red",
+        linewidth=2.2,
+        linestyle="--",
+        label="With GCA (P1) -> With GCA (P2)",
+    )
     plt.plot(
         x_no_to_yes,
         y_no_to_yes,
@@ -121,19 +159,27 @@ def main() -> None:
     )
 
     # Visual phase split on x-axis.
-    x_max = max(
-        max(x_no, default=PHASE1_END),
-        max(x_yes, default=PHASE1_END),
-        max(x_no_to_yes, default=PHASE1_END),
-        max(x_yes_to_no, default=PHASE1_END),
+    phase1_end = max(p1_end_no, p1_end_yes)
+    x_min = min(
+        min(x_no, default=0),
+        min(x_yes, default=0),
+        min(x_no_to_yes, default=0),
+        min(x_yes_to_no, default=0),
     )
-    plt.axvspan(1, PHASE1_END, color="gray", alpha=0.08, label="Phase 1")
-    plt.axvspan(PHASE2_START, x_max, color="gray", alpha=0.03, label="Phase 2")
-    plt.axvline(PHASE1_END + 0.5, color="black", linestyle=":", linewidth=1)
+    x_max = max(
+        max(x_no, default=phase1_end),
+        max(x_yes, default=phase1_end),
+        max(x_no_to_yes, default=phase1_end),
+        max(x_yes_to_no, default=phase1_end),
+    )
+    phase2_start = phase1_end + 1
+    plt.axvspan(x_min, phase1_end, color="gray", alpha=0.08, label="Phase 1")
+    plt.axvspan(phase2_start, x_max, color="gray", alpha=0.03, label="Phase 2")
+    plt.axvline(phase1_end + 0.5, color="black", linestyle=":", linewidth=1)
 
     plt.xlabel("Iteration")
     plt.ylabel(METRIC)
-    plt.title("Best-So-Far Score by Iteration (Phase 1 + Phase 2)")
+    plt.title("Best-So-Far Score by Iteration (GCA v1 Four Mixes)")
     plt.grid(True, alpha=0.3)
     plt.legend()
     plt.tight_layout()

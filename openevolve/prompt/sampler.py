@@ -63,6 +63,7 @@ class PromptSampler:
         program_artifacts: Optional[Dict[str, Union[str, bytes]]] = None,
         feature_dimensions: Optional[List[str]] = None,
         current_changes_description: Optional[str] = None,
+        gca_strategies: Optional[List[Dict[str, Any]]] = None,
         **kwargs: Any,
     ) -> Dict[str, str]:
         """
@@ -129,7 +130,8 @@ class PromptSampler:
 
         # Format evolution history
         evolution_history = self._format_evolution_history(
-            previous_programs, top_programs, inspirations, language, feature_dimensions
+            previous_programs, top_programs, inspirations, language, feature_dimensions,
+            gca_strategies=gca_strategies,
         )
 
         # Format artifacts section if enabled and available
@@ -252,6 +254,7 @@ class PromptSampler:
         inspirations: List[Dict[str, Any]],
         language: str,
         feature_dimensions: Optional[List[str]] = None,
+        gca_strategies: Optional[List[Dict[str, Any]]] = None,
     ) -> str:
         """Format the evolution history for the prompt"""
         # Get templates
@@ -431,11 +434,34 @@ class PromptSampler:
             inspirations, language, feature_dimensions
         )
 
+        # Format GCA strategies section
+        gca_strategies_section_str = ""
+        if gca_strategies:
+            lines = []
+            for s in gca_strategies:
+                desc = s.get("description", "")
+                best = s.get("best_fitness", 0.0)
+                count = s.get("count", 0)
+                lines.append(f"- **{desc}** (best fitness: {best:.4f}, seen in {count} programs)")
+            gca_text = "\n".join(lines)
+            try:
+                gca_template = self.template_manager.get_template("gca_strategies_section")
+                gca_strategies_section_str = gca_template.format(gca_strategies=gca_text)
+            except ValueError:
+                # Template not found — render inline fallback
+                gca_strategies_section_str = (
+                    "## Collective Strategy Insights\n\n"
+                    "Here are strategies that previously improved fitness. "
+                    "Reflect on whether adapting or combining them could improve the current program.\n\n"
+                    + gca_text
+                )
+
         # Combine into full history
         return history_template.format(
             previous_attempts=previous_attempts_str.strip(),
             top_programs=combined_programs_str.strip(),
             inspirations_section=inspirations_section_str,
+            gca_strategies_section=gca_strategies_section_str,
         )
 
     def _format_inspirations_section(

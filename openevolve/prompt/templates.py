@@ -92,8 +92,17 @@ as the original program, but with improved internal implementation.
 ```
 """
 
+# Template for GCA strategy insights section
+GCA_STRATEGIES_SECTION_TEMPLATE = """## Collective Strategy Insights
+
+Here are strategies that previously improved fitness. Reflect on whether adapting or combining them could improve the current program.
+
+{gca_strategies}"""
+
 # Template for formatting evolution history
-EVOLUTION_HISTORY_TEMPLATE = """## Previous Attempts
+EVOLUTION_HISTORY_TEMPLATE = """{gca_strategies_section}
+
+## Previous Attempts
 
 {previous_attempts}
 
@@ -163,6 +172,7 @@ DEFAULT_TEMPLATES = {
     "evaluator_system_message": BASE_EVALUATOR_SYSTEM_TEMPLATE,
     "diff_user": DIFF_USER_TEMPLATE,
     "full_rewrite_user": FULL_REWRITE_USER_TEMPLATE,
+    "gca_strategies_section": GCA_STRATEGIES_SECTION_TEMPLATE,
     "evolution_history": EVOLUTION_HISTORY_TEMPLATE,
     "previous_attempt": PREVIOUS_ATTEMPT_TEMPLATE,
     "top_program": TOP_PROGRAM_TEMPLATE,

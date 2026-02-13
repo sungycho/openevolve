@@ -130,6 +130,7 @@ class GCAStack:
                 policy=config.policy,
                 async_config=config.async_config,
                 autosave=config.autosave,
+                feedback=config.feedback,
             )
 
         # Persistence

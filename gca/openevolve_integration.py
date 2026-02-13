@@ -188,15 +188,11 @@ def build_gca_stack_for_oe(
 
     # Default store_path relative to OE output
     if gca_cfg.store_path == "./gca_store" and output_dir:
-        gca_cfg = GCAConfig(
-            enabled=gca_cfg.enabled,
-            store_path=os.path.join(output_dir, "gca_store"),
-            run_id=gca_cfg.run_id,
-            extractor=gca_cfg.extractor,
-            policy=gca_cfg.policy,
-            async_config=gca_cfg.async_config,
-            autosave=gca_cfg.autosave,
-        )
+        from dataclasses import replace
+
+        # Preserve all other nested GCA settings (including feedback)
+        # while relocating the default store under this run's output dir.
+        gca_cfg = replace(gca_cfg, store_path=os.path.join(output_dir, "gca_store"))
 
     # Build LLM callable from OE ensemble if available
     llm_callable = None

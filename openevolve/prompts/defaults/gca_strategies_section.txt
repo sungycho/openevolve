@@ -1,0 +1,5 @@
+## Collective Strategy Insights
+
+Here are strategies that previously improved fitness. Reflect on whether adapting or combining them could improve the current program.
+
+{gca_strategies}

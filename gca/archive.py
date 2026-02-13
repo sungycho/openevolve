@@ -131,6 +131,35 @@ class ArchiveQuery:
                 result.append((strat, counts[sid]))
         return result
 
+    def top_strategies_by_fitness(self, limit: int = 3) -> list[tuple[Strategy, float, int]]:
+        """Strategies ranked by best associated program fitness (descending).
+
+        Returns a list of (strategy, best_fitness, occurrence_count) tuples.
+        """
+        all_occ = self._persistence.load_occurrence_events()
+
+        # Group by strategy_id: track max fitness and count
+        best_fitness: dict[str, float] = {}
+        counts: dict[str, int] = {}
+        for occ in all_occ:
+            sid = occ.get("strategy_id", "")
+            fitness = occ.get("program_fitness", 0.0)
+            if not isinstance(fitness, (int, float)):
+                continue
+            if sid not in best_fitness or fitness > best_fitness[sid]:
+                best_fitness[sid] = fitness
+            counts[sid] = counts.get(sid, 0) + 1
+
+        # Sort by best fitness descending
+        sorted_ids = sorted(best_fitness, key=best_fitness.get, reverse=True)[:limit]
+
+        result: list[tuple[Strategy, float, int]] = []
+        for sid in sorted_ids:
+            strat = self._registry.get(sid)
+            if strat:
+                result.append((strat, best_fitness[sid], counts.get(sid, 0)))
+        return result
+
     def programs_with_strategy(self, strategy_id: str) -> list[str]:
         """Return program IDs that exhibit a given strategy."""
         all_occ = self._persistence.load_occurrence_events()

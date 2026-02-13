@@ -223,6 +223,62 @@ python openevolve-run.py examples/circle_packing/openevolve_output/checkpoints/c
   --iterations 100
 ```
 
+### Running with GCA v1 Strategy Feedback
+
+GCA v1 adds a feedback loop that injects top-performing strategies back into the LLM prompt as a "Collective Strategy Insights" section. Before each iteration, the top-k strategies (ranked by best associated program fitness) are serialized into the database snapshot and included in the prompt, giving the LLM explicit meta-reasoning guidance about what has worked well so far.
+
+To run with GCA v1 feedback enabled:
+
+```bash
+# Phase 1 with GCA v1 strategy feedback
+python openevolve-run.py examples/circle_packing/initial_program.py \
+  examples/circle_packing/evaluator.py \
+  --config examples/circle_packing/config_phase_1_gca_v1.yaml \
+  --iterations 100
+
+# Phase 2 with GCA v1 strategy feedback
+python openevolve-run.py examples/circle_packing/openevolve_output/checkpoints/checkpoint_100/best_program.py \
+  examples/circle_packing/evaluator.py \
+  --config examples/circle_packing/config_phase_2_gca_v1.yaml \
+  --iterations 100
+```
+
+To run baseline comparisons without GCA feedback, use the `_no_gca_v1` config variants:
+
+```bash
+# Phase 1 baseline (no GCA)
+python openevolve-run.py examples/circle_packing/initial_program.py \
+  examples/circle_packing/evaluator.py \
+  --config examples/circle_packing/config_phase_1_no_gca_v1.yaml \
+  --iterations 100
+```
+
+The key configuration difference is the `gca.feedback` section:
+
+```yaml
+gca:
+  enabled: true
+  store_path: "./gca_store"
+  feedback:
+    enabled: true
+    top_k: 3
+```
+
+When feedback is enabled, the LLM sees a prompt section like:
+
+```
+## Collective Strategy Insights
+
+Here are strategies that previously improved fitness. Reflect on whether
+adapting or combining them could improve the current program.
+
+- **uses scipy.optimize SLSQP for constrained optimization** (best fitness: 2.6343, seen in 12 programs)
+- **hexagonal close-packing as initial seed layout** (best fitness: 2.4210, seen in 8 programs)
+- **iterative greedy radius expansion with overlap correction** (best fitness: 2.3770, seen in 5 programs)
+```
+
+When feedback is disabled (or no strategies exist yet), this section is omitted entirely, preserving backward compatibility with vanilla OpenEvolve runs.
+
 To visualize the best solution:
 
 ```python
