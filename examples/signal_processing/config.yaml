@@ -3,15 +3,25 @@ max_iterations: 100
 checkpoint_interval: 10
 log_level: "INFO"
 
+# Random seed
+random_seed: 42
+
 # LLM configuration
 llm:
-  primary_model: "gemini-2.5-flash-lite-preview-06-17"
+  primary_model: "google/gemini-2.5-flash"
+  # primary_model: "gpt-5"
+  # primary_model: "llama3.1-8b"
   primary_model_weight: 0.8
-  secondary_model: "gemini-2.5-flash"
+  secondary_model: "openai/o3-mini"
+  # secondary_model: "llama-4-scout-17b-16e-instruct"
+  # secondary_model: "gpt-5-nano"
   secondary_model_weight: 0.2
-  api_base: "https://generativelanguage.googleapis.com/v1beta/openai/"
+  api_base: "https://openrouter.ai/api/v1"
+  # api_base: "https://api.cerebras.ai/v1"
+  # api_base: "https://api.openai.com/v1"
+  api_key: ${OPENROUTER_API_KEY}
   temperature: 0.6
-  top_p: 0.95
+  top_p: 0.9
   max_tokens: 32000
 
 # Prompt configuration

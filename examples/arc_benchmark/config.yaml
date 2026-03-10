@@ -16,10 +16,12 @@ evaluator:
   parallel_evaluations: 4
   timeout: 180000
 llm:
-  api_base: https://generativelanguage.googleapis.com/v1beta/openai/
+  api_base: "https://openrouter.ai/api/v1"
+  api_key: ${OPENROUTER_API_KEY}
   max_tokens: 32768
   models:
-  - name: gemini-3-pro-preview
+  - name: google/gemini-2.5-flash-lite
+  - name: google/gemini-2.5-flash
   temperature: 0.7
   timeout: 3000
   top_p: 0.95

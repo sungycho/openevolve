@@ -21,16 +21,35 @@ def run_with_timeout(program_path, timeout_seconds=60):
     Returns:
         Result of the function or raises TimeoutError
     """
-    cmd = ["python", "submit.py", program_path, "-p", "alphabet", "-l", "Python 3", "-f"]
+    script_dir = Path(__file__).resolve().parent
+    submit_path = script_dir / "submit.py"
+    target_program = str(Path(program_path).resolve())
+
+    cmd = [sys.executable, str(submit_path), target_program, "-p", "alphabet", "-l", "Python 3", "-f"]
 
     try:
         # Run the command and grab its output using subprocess.Popen
-        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        proc = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            cwd=str(script_dir),
+        )
         stdout, stderr = proc.communicate(timeout=timeout_seconds)
         exit_code = proc.returncode
         if exit_code != 0:
-            print(stderr)  # Print the error output if the command failed
-            raise RuntimeError(f"Process exited with code {exit_code}")
+            # submit.py often reports failures on stdout; include both streams for debugging.
+            stdout_text = (stdout or "").strip()
+            stderr_text = (stderr or "").strip()
+            if stdout_text:
+                print(stdout_text)
+            if stderr_text:
+                print(stderr_text)
+            raise RuntimeError(
+                "Process exited with code "
+                f"{exit_code}. stdout: {stdout_text or '(empty)'}; stderr: {stderr_text or '(empty)'}"
+            )
     except subprocess.TimeoutExpired:
         # Kill the process if it times out
         proc.kill()
