@@ -71,3 +71,15 @@ prompt:
 
 # Logging
 log_level: "INFO"
+
+# GCA v1 configuration (feedback prompt injection enabled)
+gca:
+  enabled: false
+  store_path: "./gca_store"
+  extractor:
+    type: "llm_solution_analysis"
+  policy:
+    type: "mvp"
+  feedback:
+    enabled: true
+    top_k: 3

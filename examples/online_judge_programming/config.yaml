@@ -76,5 +76,17 @@ evaluator:
   use_llm_feedback: false
 
 # Evolution settings
-diff_based_evolution: true
-allow_full_rewrites: false
+diff_based_evolution: false
+allow_full_rewrites: true
+
+# GCA v1 configuration (feedback prompt injection enabled)
+gca:
+  enabled: true
+  store_path: "./gca_store"
+  extractor:
+    type: "llm_solution_analysis"
+  policy:
+    type: "mvp"
+  feedback:
+    enabled: true
+    top_k: 3

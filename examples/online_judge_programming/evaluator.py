@@ -4,8 +4,10 @@ Evaluator for the function minimization example
 
 import re
 import subprocess
+import sys
 import time
 import traceback
+from pathlib import Path
 
 
 def run_with_timeout(program_path, timeout_seconds=60):
