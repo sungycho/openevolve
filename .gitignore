@@ -61,7 +61,8 @@ problems
 .env
 
 #planning
-.claude/
+# .claude/
+.claude/worktrees/
 
 sketch.md
 
@@ -72,3 +73,7 @@ playground.py
 # runs
 examples/*/runs/
 examples/*/*/runs/
+
+ils-bh
+
+ils_output
