@@ -40,15 +40,15 @@ _NOT_ILS_ABLE_SCHEMA = {
 
 _SYSTEM_PROMPT = """\
 You are an expert algorithm analyst specializing in Iterated Local Search (ILS) and \
-stochastic optimization. Your task is to analyze a given program and identify whether \
-it contains a stochastic initialization component that could benefit from ILS — i.e., \
-a component where different random seeds or initial configurations lead to different \
-final solutions.
+numerical optimization. Your task is to analyze a given program and identify whether \
+it contains a component that could benefit from ILS — either a stochastic initialization \
+component (random seeds, random layouts) OR tunable continuous hyperparameters \
+(fixed default values that control algorithm behavior and whose optimal values are unknown).
 
 You must respond with valid JSON only, no markdown code blocks."""
 
 _USER_PROMPT_TEMPLATE = """\
-Analyze the following program and determine if it has an ILS-able stochastic component.
+Analyze the following program and determine if it has an ILS-able component.
 
 PROBLEM DESCRIPTION:
 {problem_description}
@@ -58,10 +58,30 @@ PROGRAM CODE:
 {code}
 ```
 
-An ILS-able component is one where:
-1. There is a stochastic initialization (random seed, random placement, random restart)
-2. Different initializations can lead to meaningfully different final solutions
-3. The component can be perturbed or replaced to explore the solution space
+An ILS-able component is ANY of the following:
+
+TYPE A — Stochastic initialization (random seed / random restart):
+  • There is explicit randomness: np.random, random.seed, torch.manual_seed, etc.
+  • Different random seeds or initial placements lead to different final solutions.
+  • Example: circle packing with random center initialization.
+
+TYPE B — Tunable continuous hyperparameters (fixed defaults that can be optimized):
+  • The algorithm has numeric parameters with hardcoded default values.
+  • Perturbing these parameters changes algorithm behavior and output quality.
+  • The optimal values are unknown and problem-dependent.
+  • Example: Kalman filter with process_variance=0.01, measurement_variance=0.1, window_size=20.
+  • Example: neural network with learning_rate=0.001, hidden_size=128, dropout=0.2.
+
+TYPE C — Structural/layout parameters (discrete or constrained search spaces):
+  • Discrete choices that affect solution structure.
+  • Example: number of clusters, polynomial degree, filter type.
+
+A program is ILS-able if it has ANY of the above. Most non-trivial algorithms have
+at least tunable hyperparameters (Type B), so default to ILS-able unless the program
+is purely deterministic with no configurable parameters whatsoever.
+
+Prefer Type A if present (stochastic search is most powerful). Fall back to Type B
+(hyperparameter tuning) if no stochastic component exists.
 
 Respond with exactly this JSON structure (no markdown):
 
@@ -73,15 +93,15 @@ If ILS-able:
     "description": "<1-2 sentence description of what it does>",
     "type": "<continuous|discrete|constrained>",
     "location": "<function name and approximate line range>",
-    "degrees_of_freedom": "<what can be perturbed, e.g. x,y coordinates of N centers>"
+    "degrees_of_freedom": "<what can be perturbed, e.g. 'process_variance, measurement_variance, window_size' or 'x,y coordinates of N centers'>"
   }},
-  "reasoning": "<why this component is ILS-able>"
+  "reasoning": "<why this component is ILS-able and which type (A/B/C) applies>"
 }}
 
 If not ILS-able:
 {{
   "is_ils_able": false,
-  "reasoning": "<why the algorithm is not ILS-able>"
+  "reasoning": "<why the algorithm has no stochastic components AND no tunable hyperparameters>"
 }}"""
 
 

@@ -48,6 +48,14 @@ I need to generate search strategies for ILS. You must always generate:
 1. "perturb_best" - Perturb the ILS component from the current best solution with noise
 2. "random_restart" - Completely randomize the ILS component
 
+IMPORTANT — adapt strategies to the component type:
+• If the component is stochastic (random seeds, random layout): perturb_best perturbs
+  the current best random seed/layout; random_restart tries a fully new random init.
+• If the component is continuous hyperparameters (Type B, e.g. process_variance,
+  window_size): perturb_best means adding Gaussian noise to current best hyperparameter
+  values; random_restart means sampling hyperparameters uniformly from a reasonable
+  range. Use log-scale perturbation for parameters that span orders of magnitude.
+
 Additionally, generate up to {max_tier2} domain-specific structured initialization strategies \
 that exploit knowledge of the problem structure. Only include a strategy if you can \
 provide a concrete structural justification. Skip if you cannot justify it.

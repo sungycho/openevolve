@@ -96,7 +96,7 @@ def _run_single_script(
     if proc.returncode != 0:
         logger.warning(
             f"Strategy '{script.strategy_name}' exited with code {proc.returncode}\n"
-            f"stderr: {proc.stderr[:500]}"
+            f"stderr:\n{proc.stderr[:2000]}"
         )
 
     # Parse stdout JSON lines
@@ -133,6 +133,13 @@ def _run_single_script(
         best_record = max(seed_scores, key=lambda r: r.get("score", -float("inf")))
         best_score = best_record.get("score", -float("inf"))
         best_seed = best_record.get("seed", -1)
+
+    # If no output at all, log stderr to help debug silent crashes
+    if not seed_scores and best_score == -float("inf") and proc.stderr.strip():
+        logger.error(
+            f"Strategy '{script.strategy_name}' produced no output. "
+            f"stderr:\n{proc.stderr[:3000]}"
+        )
 
     logger.info(
         f"Strategy '{script.strategy_name}' done in {runtime:.1f}s. "

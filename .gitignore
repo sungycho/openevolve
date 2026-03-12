@@ -77,3 +77,7 @@ examples/*/*/runs/
 ils-bh
 
 ils_output
+
+.personal
+
+.claude/chat-log

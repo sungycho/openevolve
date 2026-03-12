@@ -45,8 +45,9 @@ _PHASE2_REFERENCE = '''
 #
 # PHASE 2 — basin-hopping chains (scipy.optimize.basinhopping)
 #   • For each Phase 1 winner, run an independent basin-hopping chain.
-#   • Use a custom step class (like CenterStep below) to perturb ONLY the
-#     stochastic degrees of freedom (e.g. initial layout parameters), not the optimized values —
+#   • Use a custom step class (like PerturbStep below) to perturb ONLY the
+#     search degrees of freedom (e.g. layout parameters OR hyperparameter values),
+#     not the deterministically-optimized values —
 #     leave SLSQP free to re-optimise everything else.
 #   • Seed BOTH the step class RNG and basinhopping(..., seed=...) from the
 #     same integer so every run is fully reproducible given the same seeds.
@@ -169,8 +170,9 @@ def _build_prompt(
         "",
         f"Phase 2 — basin-hopping chains (--niter steps each, default 100):",
         "  • Run one independent scipy.optimize.basinhopping chain per Phase 1 winner.",
-        "  • Use a custom step class that perturbs ONLY the stochastic degrees of freedom",
-        "    (e.g. center coordinates), seeded with: winner_seed + phase2_seed_offset.",
+        "  • Use a custom step class that perturbs ONLY the search degrees of freedom",
+        "    (e.g. center coordinates for layout problems, or hyperparameter values for",
+        "    tuning problems), seeded with: winner_seed + phase2_seed_offset.",
         "  • Also pass seed=winner_seed+phase2_seed_offset to basinhopping() itself.",
         "  • Record every accepted feasible step as (step_idx, score, x.copy()) in callback.",
         "  • Run Phase 2 chains in parallel via ProcessPoolExecutor.",
@@ -215,7 +217,7 @@ def _call_llm_for_code(prompt: str, llm_model: str, client) -> str:
     """Call LLM and return generated code string."""
     response = client.chat.completions.create(
         model=llm_model,
-        max_tokens=8192,
+        max_tokens=16384,
         messages=[
             {"role": "system", "content": _SYSTEM_PROMPT},
             {"role": "user", "content": prompt},

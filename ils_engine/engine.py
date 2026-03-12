@@ -14,6 +14,29 @@ from ils_engine.config import ILSConfig
 logger = logging.getLogger(__name__)
 
 
+def _evaluate_program(code: str, evaluator_path: str) -> dict:
+    """Write code to a temp file and evaluate it using the evaluator script."""
+    import importlib.util
+
+    evaluator_path = str(Path(evaluator_path).resolve())
+    spec = importlib.util.spec_from_file_location("evaluator", evaluator_path)
+    evaluator = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(evaluator)
+
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
+        f.write(code)
+        tmp_path = f.name
+
+    try:
+        result = evaluator.evaluate(tmp_path)
+        return result if isinstance(result, dict) else {}
+    except Exception as e:
+        logger.warning(f"Baseline evaluation failed: {e}")
+        return {}
+    finally:
+        os.unlink(tmp_path)
+
+
 class ILSEngine:
     """
     Orchestrates the full Iterated Local Search post-processing pipeline:
@@ -71,13 +94,31 @@ class ILSEngine:
 
         # Use the first (best) program as baseline
         best_program = programs[0]
+
+        # If no metrics were stored (e.g. loading from a bare best_program.py without
+        # best_program_info.json), evaluate the program now to get real metrics.
+        if not best_program.metrics:
+            logger.info("No stored metrics found — evaluating baseline program...")
+            best_program.metrics = _evaluate_program(
+                best_program.code, config.evaluator_path
+            )
+            logger.info(f"Baseline metrics: {best_program.metrics}")
+
         # Auto-detect primary objective metric if not explicitly set
         score_metric = config.score_metric
         if score_metric == "combined_score":
             raw_metrics = {k: v for k, v in best_program.metrics.items()
                            if k not in _INTERNAL_METRICS and isinstance(v, (int, float))}
             if raw_metrics:
-                score_metric = max(raw_metrics, key=raw_metrics.get)
+                # Prefer normalized score metrics (0–1 range, "score" in name) over raw
+                # counts/penalties like slope_changes or false_reversals which can be
+                # large integers and would be wrongly selected as "highest value".
+                score_candidates = {k: v for k, v in raw_metrics.items()
+                                    if "score" in k.lower() and 0.0 <= v <= 1.0}
+                if score_candidates:
+                    score_metric = max(score_candidates, key=score_candidates.get)
+                else:
+                    score_metric = max(raw_metrics, key=raw_metrics.get)
                 logger.info(f"Auto-detected score metric: '{score_metric}' "
                             f"(override with --score-metric)")
         baseline_score = best_program.metrics.get(score_metric, best_program.metrics.get("combined_score", 0.0))
