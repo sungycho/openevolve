@@ -47,11 +47,18 @@ def _load_best_program_from_dir(path: str):
     """Load just the best program from a best/ or checkpoint directory."""
     from openevolve.database import Program
 
-    program_file = os.path.join(path, "best_program.py")
+    # Support both Python and C++ best programs
+    program_file = None
+    for candidate in ("best_program.py", "best_program.cpp"):
+        candidate_path = os.path.join(path, candidate)
+        if os.path.exists(candidate_path):
+            program_file = candidate_path
+            break
+
     info_file = os.path.join(path, "best_program_info.json")
 
-    if not os.path.exists(program_file):
-        raise FileNotFoundError(f"No best_program.py found at {path}")
+    if program_file is None:
+        raise FileNotFoundError(f"No best_program.py or best_program.cpp found at {path}")
 
     with open(program_file, "r") as f:
         code = f.read()
@@ -124,7 +131,9 @@ def select_programs(
 
     # Sort all programs by score descending
     all_programs.sort(key=_get_combined_score, reverse=True)
-    logger.info(f"Loaded {len(all_programs)} programs, top score: {_get_combined_score(all_programs[0]):.6f}")
+    logger.info(
+        f"Loaded {len(all_programs)} programs, top score: {_get_combined_score(all_programs[0]):.6f}"
+    )
 
     if selection_mode == "vanilla_top_k":
         return all_programs[:top_k]
@@ -138,9 +147,7 @@ def select_programs(
             selected.append(candidate)
             continue
         # Check novelty against already selected
-        min_dist = min(
-            _normalized_edit_distance(candidate.code, s.code) for s in selected
-        )
+        min_dist = min(_normalized_edit_distance(candidate.code, s.code) for s in selected)
         if min_dist >= novelty_threshold:
             selected.append(candidate)
             logger.debug(
@@ -148,9 +155,7 @@ def select_programs(
                 f"min_dist={min_dist:.3f})"
             )
         else:
-            logger.debug(
-                f"Rejected program {candidate.id} (too similar, min_dist={min_dist:.3f})"
-            )
+            logger.debug(f"Rejected program {candidate.id} (too similar, min_dist={min_dist:.3f})")
 
     logger.info(f"Selected {len(selected)} programs via {selection_mode}")
     return selected

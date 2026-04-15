@@ -14,6 +14,14 @@ from ils_engine.config import ILSConfig
 logger = logging.getLogger(__name__)
 
 
+def _detect_language(code: str) -> str:
+    """Detect programming language from code content heuristics."""
+    cpp_signals = ["#include", "int main(", "::", "std::", "cout", "scanf", "printf"]
+    if any(sig in code for sig in cpp_signals):
+        return "cpp"
+    return "python"
+
+
 def _evaluate_program(code: str, evaluator_path: str) -> dict:
     """Write code to a temp file and evaluate it using the evaluator script."""
     import importlib.util
@@ -23,7 +31,8 @@ def _evaluate_program(code: str, evaluator_path: str) -> dict:
     evaluator = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(evaluator)
 
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
+    suffix = ".cpp" if _detect_language(code) == "cpp" else ".py"
+    with tempfile.NamedTemporaryFile(mode="w", suffix=suffix, delete=False) as f:
         f.write(code)
         tmp_path = f.name
 
@@ -68,6 +77,7 @@ class ILSEngine:
         """
         config = self.config
         from ils_engine.reporter import _task_name_from_evaluator
+
         run_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
         # Known OpenEvolve-internal normalized metrics — never use these as the objective
@@ -99,29 +109,35 @@ class ILSEngine:
         # best_program_info.json), evaluate the program now to get real metrics.
         if not best_program.metrics:
             logger.info("No stored metrics found — evaluating baseline program...")
-            best_program.metrics = _evaluate_program(
-                best_program.code, config.evaluator_path
-            )
+            best_program.metrics = _evaluate_program(best_program.code, config.evaluator_path)
             logger.info(f"Baseline metrics: {best_program.metrics}")
 
         # Auto-detect primary objective metric if not explicitly set
         score_metric = config.score_metric
         if score_metric == "combined_score":
-            raw_metrics = {k: v for k, v in best_program.metrics.items()
-                           if k not in _INTERNAL_METRICS and isinstance(v, (int, float))}
+            raw_metrics = {
+                k: v
+                for k, v in best_program.metrics.items()
+                if k not in _INTERNAL_METRICS and isinstance(v, (int, float))
+            }
             if raw_metrics:
                 # Prefer normalized score metrics (0–1 range, "score" in name) over raw
                 # counts/penalties like slope_changes or false_reversals which can be
                 # large integers and would be wrongly selected as "highest value".
-                score_candidates = {k: v for k, v in raw_metrics.items()
-                                    if "score" in k.lower() and 0.0 <= v <= 1.0}
+                score_candidates = {
+                    k: v for k, v in raw_metrics.items() if "score" in k.lower() and 0.0 <= v <= 1.0
+                }
                 if score_candidates:
                     score_metric = max(score_candidates, key=score_candidates.get)
                 else:
                     score_metric = max(raw_metrics, key=raw_metrics.get)
-                logger.info(f"Auto-detected score metric: '{score_metric}' "
-                            f"(override with --score-metric)")
-        baseline_score = best_program.metrics.get(score_metric, best_program.metrics.get("combined_score", 0.0))
+                logger.info(
+                    f"Auto-detected score metric: '{score_metric}' "
+                    f"(override with --score-metric)"
+                )
+        baseline_score = best_program.metrics.get(
+            score_metric, best_program.metrics.get("combined_score", 0.0)
+        )
         logger.info(f"Baseline score: {baseline_score:.6f}")
 
         all_results = []
@@ -135,9 +151,13 @@ class ILSEngine:
             logger.info("Step 1: Analyzing for ILS-able components...")
             from ils_engine.ils_analyzer import analyze_program
 
+            program_language = _detect_language(program.code)
+            logger.info(f"Detected language: {program_language}")
+
             component_spec = analyze_program(
                 program=program,
                 problem_description=config.problem_description,
+                language=program_language,
                 llm_model=config.analyzer_model or config.llm_model,
                 llm_api_key=config.llm_api_key,
             )
@@ -214,6 +234,7 @@ class ILSEngine:
             logger.warning("No results collected from any program.")
             # Still report baseline
             from ils_engine.reporter import print_results, save_results
+
             print_results([], baseline_score, task_name="unknown")
             task_dir = save_results(
                 results=[],

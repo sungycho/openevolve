@@ -21,7 +21,7 @@ class StrategyResult:
     best_score: float
     best_seed: int
     best_program_code: Optional[str]
-    all_seed_scores: List[dict]       # list of {seed, score, sigma} dicts
+    all_seed_scores: List[dict]  # list of {seed, score, sigma} dicts
     runtime_s: float
     error: Optional[str] = None
 
@@ -44,17 +44,24 @@ def _run_single_script(
     if best_program_output:
         env["BEST_PROGRAM_OUTPUT"] = best_program_output
 
-    cmd = [
-        sys.executable,
-        script.script_path,
-        "--n-workers",    str(max(1, num_workers)),
-        "--phase1-top-k", str(phase1_top_k),
-        "--phase2-seed",  str(phase2_seed),
-        "--niter",        str(niter),
-        "--stepsize",     str(stepsize),
-    ]
-    if phase1_budget is not None:
-        cmd += ["--phase1-budget", str(phase1_budget)]
+    is_cpp = getattr(script, "language", "python") == "cpp"
+
+    cmd = [sys.executable, script.script_path, "--n-workers", str(max(1, num_workers))]
+
+    # Python-style SLSQP/basin-hopping args are not used by C++ scripts
+    if not is_cpp:
+        cmd += [
+            "--phase1-top-k",
+            str(phase1_top_k),
+            "--phase2-seed",
+            str(phase2_seed),
+            "--niter",
+            str(niter),
+            "--stepsize",
+            str(stepsize),
+        ]
+        if phase1_budget is not None:
+            cmd += ["--phase1-budget", str(phase1_budget)]
 
     logger.info(f"Running strategy '{script.strategy_name}': {' '.join(cmd)}")
 
@@ -198,7 +205,16 @@ def run_scripts(
     # Run strategies in parallel (one process per strategy)
     results = []
     run_args = [
-        (s, num_workers, timeout_per_strategy, os.path.join(output_dir, f"{s.strategy_name}_best.py"), phase_kwargs)
+        (
+            s,
+            num_workers,
+            timeout_per_strategy,
+            os.path.join(
+                output_dir,
+                f"{s.strategy_name}_best.{'cpp' if getattr(s, 'language', 'python') == 'cpp' else 'py'}",
+            ),
+            phase_kwargs,
+        )
         for s in scripts
     ]
     with concurrent.futures.ProcessPoolExecutor(max_workers=len(scripts)) as executor:
@@ -210,15 +226,17 @@ def run_scripts(
                 results.append(result)
             except Exception as e:
                 logger.error(f"Strategy '{script.strategy_name}' executor error: {e}")
-                results.append(StrategyResult(
-                    strategy_name=script.strategy_name,
-                    best_score=-float("inf"),
-                    best_seed=-1,
-                    best_program_code=None,
-                    all_seed_scores=[],
-                    runtime_s=0.0,
-                    error=str(e),
-                ))
+                results.append(
+                    StrategyResult(
+                        strategy_name=script.strategy_name,
+                        best_score=-float("inf"),
+                        best_seed=-1,
+                        best_program_code=None,
+                        all_seed_scores=[],
+                        runtime_s=0.0,
+                        error=str(e),
+                    )
+                )
 
     # Sort by strategy name for deterministic ordering
     results.sort(key=lambda r: r.strategy_name)
